@@ -8,10 +8,19 @@ instead of each building its own.
 | image | what it is | used by |
 |---|---|---|
 | `ghcr.io/andreziviani/odi-toolchain-uclibc` | our own binutils 2.47 (with the Lexra opcodes), gcc 16.2.0 and uClibc-ng 1.0.59, `mips-linux-uclibc`, prefix `/opt/oss`, Linux 6.18 UAPI headers; plus the host tools a kernel build needs | odi-oss: the kernel, busybox, dropbear, iproute2 |
-| `ghcr.io/andreziviani/odi-toolchain-freestanding` | Debian bookworm `gcc-mips-linux-gnu` + binutils + `qemu-user-static`, for `-nostdlib` binaries | odi-oss `src/` (diag, nv, omcid, ...), sfp-exporter (`metricsd`), odi-ui (`confd`) |
+| `ghcr.io/andreziviani/odi-toolchain-freestanding` | Debian bookworm `gcc-mips-linux-gnu` + binutils + `qemu-mips-static`, for `-nostdlib` binaries | odi-oss `src/` (diag, nv, omcid, ...), sfp-exporter (`metricsd`), odi-ui (`confd`) |
 
 Both images carry the shared ISA gate, `isa-audit` and `isa-allowlist`
 (`isa/`), and `flags.mk`, the target flags with the reasoning behind them.
+
+Both are **minimal**: they carry what it takes to use the toolchain, not
+what it took to build it, so a consumer pulls a fraction of the build. The
+uclibc image is `debian:bookworm-slim` with the stripped `/opt/oss` (the
+host programs only -- the target libraries are untouched), the runtime
+libraries `cc1` links against and the host tools a kernel build calls; the
+compiler build happens in a stage that is never published. The freestanding
+image carries one emulator, `qemu-mips-static`, out of the 370 MB
+`qemu-user-static` package, and no python beyond `python3-minimal`.
 
 ## Using an image
 
@@ -19,12 +28,12 @@ Pin the **digest**, not the tag. A tag can be moved; a digest names exactly
 one set of bytes, so a build that pulls it is the build that was verified.
 Each consumer keeps its pin in one place:
 
-    ghcr.io/andreziviani/odi-toolchain-freestanding:v1@sha256:<digest>
+    ghcr.io/andreziviani/odi-toolchain-freestanding:v2@sha256:<digest>
 
 The digests of every published version are in the summary of the
 `publish` job that built it (Actions, the tag run). Pull and use:
 
-    docker pull ghcr.io/andreziviani/odi-toolchain-freestanding:v1@sha256:<digest>
+    docker pull ghcr.io/andreziviani/odi-toolchain-freestanding:v2@sha256:<digest>
     docker run --rm -v "$PWD":/src -w /src <that ref> make ...
 
 The uclibc image is `linux/amd64` only (building gcc under arm64 emulation
@@ -85,8 +94,8 @@ mnemonics confirmed on the hardware).
 
 ## Releasing
 
-    git tag -s freestanding-v2 && git push origin freestanding-v2
-    git tag -s uclibc-v2 && git push origin uclibc-v2
+    git tag -s freestanding-v3 && git push origin freestanding-v3
+    git tag -s uclibc-v3 && git push origin uclibc-v3
 
 The workflow builds and pushes the image and prints its digest; update the
 pin in each consumer by hand, in its own branch, and rebuild there. Versions
@@ -94,7 +103,7 @@ are plain integers and never reused.
 
 ## Layout
 
-    uclibc/Dockerfile        the uclibc image: build stage, then base + /opt/oss
+    uclibc/Dockerfile        the uclibc image: a build stage, then slim base + stripped /opt/oss
     uclibc/build.sh          binutils, headers, gcc (two stages), uClibc-ng
     uclibc/audit-libs.sh     the target-library audit; odi-audit-libs in the image
     uclibc/patches/          binutils (the Lexra opcodes) and uClibc-ng patches
