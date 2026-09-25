@@ -92,6 +92,20 @@ trusted on its own: every binary goes through `isa-audit` (deny list,
 disassembled at mips32 so a stray `mul` decodes) and `isa-allowlist` (only
 mnemonics confirmed on the hardware).
 
+## Versions
+
+| tag | reference | notes |
+|---|---|---|
+| `uclibc-v2` | `ghcr.io/andreziviani/odi-toolchain-uclibc:v2@sha256:5305427b3e87eb2e3f2416778e68cbbb46c3f8b3dfb1317b52eedad803115910` | minimal: bookworm-slim final stage, host programs stripped; same target libraries as v1 |
+| `freestanding-v2` | `ghcr.io/andreziviani/odi-toolchain-freestanding:v2@sha256:a0342d9662553d725b29be891d5647393f76768c7cf3decb34b4f4bb2e0de611` | minimal: `qemu-mips-static` only, `python3-minimal`; same compiler as v1 |
+| `uclibc-v1` | `ghcr.io/andreziviani/odi-toolchain-uclibc:v1@sha256:804c8b4b30d61c93663a6bf3986c075680bb1894d81a95d0fff4738ef4472ed1` | first release; superseded by v2 |
+| `freestanding-v1` | `ghcr.io/andreziviani/odi-toolchain-freestanding:v1@sha256:e1e6ae4da43a9246347b39a50241a2eca953e383e7c5624492d82c034ec90686` | first release; superseded by v2 |
+
+Every row builds the same binaries: an odi-oss image built with v1 or v2
+is identical file for file to one built with the toolchain these images
+replaced, build timestamps aside, and sfp-exporter v1.0.3 and odi-ui v1.0.4
+rebuild byte-for-byte to their releases.
+
 ## Releasing
 
     git tag -s freestanding-v3 && git push origin freestanding-v3
