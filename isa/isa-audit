@@ -1,0 +1,144 @@
+#!/bin/sh
+#
+# The ISA gate for the RLX5281: refuse a binary that carries an instruction
+# this CPU lacks. Installed in both images as /usr/local/bin/isa-audit, with
+# isa-allowlist beside it (the same script, the other way round).
+#
+#     isa-audit     <elf> [<elf>...]    deny list: instructions known to trap
+#     isa-allowlist <elf> [<elf>...]    allow list: anything not confirmed
+#
+# Exit status: 0 clean; 1 a trapping instruction, floating point, or a file
+# that could not be audited; 2 (isa-allowlist only) nothing known to trap,
+# but a mnemonic never executed on the hardware. Callers that want a hard
+# gate treat any non-zero as a failure; a caller may choose to surface 2 as
+# a warning, since the fix is to execute that instruction on a device and
+# extend the list, never to extend the list from a datasheet.
+#
+# The RLX5281 is a Lexra MIPS core that implements ISA levels in pieces,
+# measured by executing each instruction on an ODI DFP-34X-2C2:
+#
+#     ok:       lwl lwr swl swr, movz movn, ll sc sync, bltzl, madd
+#     ILLEGAL:  mul, clz, teq, beql, bnel
+#
+# A binary carrying one builds clean, links clean, and traps on the device
+# the first time that code path runs -- which is why this is a gate that
+# exits non-zero, not a report. And qemu-user proves nothing here: it
+# emulates a full MIPS32 CPU and runs mul and clz without complaint.
+#
+# WHY TWO LISTS. The deny list names what has been proved illegal plus the
+# rest of its encoding class (the conditional traps, measured teq; tne is
+# what asm/bug.h reaches for). A deny list alone is not enough: one of
+# exactly that form passed a dropbear carrying 147 teq, because nobody had
+# put teq on the list yet. A check that only looks for problems already
+# known cannot find a new one. So the allow list keeps the mnemonics
+# CONFIRMED PRESENT -- MIPS-I plus the handful of later instructions measured
+# on the device, plus the privileged ones a booting kernel proves -- and
+# reports everything else.
+#
+# beqzl/bnezl are assembler aliases for beql/bnel against $zero. Omitting
+# them once under-reported a binary by 62 instructions, so they are listed.
+#
+# Only executable sections are disassembled, and never one of type NOTE: a
+# raw vmlinux carries a .notes section flagged AX by its linker script, and
+# objdump decoded its bytes as a phantom beql. The section list is derived
+# per file from readelf, because it differs (a module has .text.unlikely,
+# vmlinux does not).
+#
+# -m mips:isa32, always: these binaries are flagged mips1 or mips2, and at
+# that level objdump decodes the SPECIAL2 encodings as .word, so mul and clz
+# would report as zero -- exactly the instructions this gate exists to find.
+#
+# OBJDUMP and READELF default to whichever cross binutils the image has:
+# ours (mips-linux-uclibc-, with the Lexra opcodes) in the uclibc image,
+# Debian mips-linux-gnu- in the freestanding one.
+set -eu
+
+mode=deny
+case $(basename "$0") in
+isa-allowlist) mode=allow ;;
+esac
+if [ "${1:-}" = --allowlist ]; then mode=allow; shift; fi
+[ $# -gt 0 ] || { echo "usage: $(basename "$0") <elf> [<elf>...]" >&2; exit 1; }
+
+pick() {
+	for p in mips-linux-uclibc- mips-linux-gnu-; do
+		command -v "$p$1" >/dev/null 2>&1 && { echo "$p$1"; return; }
+	done
+	echo "no MIPS $1 on PATH" >&2
+	exit 1
+}
+OBJDUMP=${OBJDUMP:-$(pick objdump)}
+READELF=${READELF:-$(pick readelf)}
+
+# The conditional-trap family, branch-likely, and the SPECIAL2 pair.
+DENY='^(mul|clz|clo|teq|tne|tge|tgeu|tlt|tltu|teqi|tnei|tgei|tgeiu|tlti|tltiu|beql|bnel|beqzl|bnezl)$'
+# The RLX5281 has no FPU. Any FP mnemonic (add.s, cvt.d.w, c.eq.s) or a
+# coprocessor-1 move, load or branch is a soft-float build gone wrong.
+FP='^([a-z][a-z0-9]*[.][a-z0-9.]+|mfc1|mtc1|cfc1|ctc1|lwc1|swc1|ldc1|sdc1|bc1f|bc1t|bc1fl|bc1tl)$'
+
+# MIPS-I as binutils spells it, plus the measured extras and the privileged
+# instructions the kernel executes on every boot. move, li, b, bal, neg,
+# negu, not, nop and beqz/bnez are objdump spellings of MIPS-I encodings.
+# Grow this only by executing an instruction on the device.
+ALLOW='^(add|addi|addiu|addu|and|andi|b|bal|beq|beqz|bgez|bgezal|bgtz|blez|bltz|bltzal|bne|bnez|break|div|divu|j|jal|jalr|jr|lb|lbu|lh|lhu|li|lui|lw|lwl|lwr|mfhi|mflo|move|mthi|mtlo|mult|multu|neg|negu|nop|nor|not|or|ori|sb|sh|sll|sllv|slt|slti|sltiu|sltu|sra|srav|srl|srlv|sub|subu|sw|swl|swr|syscall|xor|xori|movz|movn|ll|sc|sync|madd|bltzl|mfc0|mtc0|eret|tlbwi|tlbwr|tlbp|tlbr|cache|wait|rfe)$'
+
+rc=0
+for f in "$@"; do
+	name=$f
+	[ -f "$f" ] || { echo "$name: no such file" >&2; rc=1; continue; }
+	# A file objdump cannot parse used to print an error and then report
+	# zero, which reads exactly like a pass.
+	if ! "$OBJDUMP" -f "$f" >/dev/null 2>&1; then
+		echo "$name: NOT AN ELF -- cannot be audited" >&2
+		rc=1; continue
+	fi
+	# readelf, not objdump -h: objdump reports its own CODE/DATA guess
+	# rather than the section header flags.
+	jargs=$("$READELF" -S -W "$f" 2>/dev/null | sed 's/\[ */[/' | awk '
+	  $1 ~ /^\[[0-9]+\]$/ {
+	    name = $2; type = $3; flg = "";
+	    for (i = 7; i <= NF; i++) if ($i ~ /^[WAXMSILOGTCxoEDp]+$/) { flg = $i; break }
+	    if (type != "NULL" && type != "NOTE" && index(flg, "X") > 0)
+	      printf "-j %s ", name
+	  }')
+	if [ -z "$jargs" ]; then
+		echo "$name: no executable sections found -- cannot be audited" >&2
+		rc=1; continue
+	fi
+	# shellcheck disable=SC2086 # jargs is a deliberate list of -j NAME pairs
+	census=$("$OBJDUMP" -d -m mips:isa32 $jargs "$f" \
+	  | awk -F'\t' 'NF>=3 { gsub(/ /, "", $3); print $3 }' | sort | uniq -c)
+	if [ -z "$census" ]; then
+		echo "$name: no instructions decoded -- cannot be audited" >&2
+		rc=1; continue
+	fi
+	# census lines are "<count> <mnemonic>".
+	hits() { printf '%s\n' "$census" | awk -v re="$1" '$2 ~ re { printf "%s(%s) ", $2, $1; n += $1 } END { if (n) print ""; }'; }
+	count() { printf '%s\n' "$census" | awk -v re="$1" '$2 ~ re { n += $1 } END { print n + 0 }'; }
+
+	nd=$(count "$DENY"); nf=$(count "$FP")
+	if [ "$mode" = deny ]; then
+		echo "$name: instructions the RLX5281 traps on: $nd, floating point: $nf"
+		[ "$nd" = 0 ] || echo "    $(hits "$DENY")"
+		[ "$nf" = 0 ] || echo "    $(hits "$FP")"
+		[ "$nd" = 0 ] && [ "$nf" = 0 ] || rc=1
+	else
+		distinct=$(printf '%s\n' "$census" | grep -c .)
+		bad=$(printf '%s\n' "$census" | awk -v re="$ALLOW" '$2 !~ re { printf "%s(%s) ", $2, $1 }')
+		if [ -z "$bad" ]; then
+			echo "$name: $distinct distinct mnemonics, all confirmed present"
+		elif [ "$nd" != 0 ] || [ "$nf" != 0 ]; then
+			echo "$name: TRAPS or FLOATING POINT: $bad"
+			rc=1
+		else
+			echo "$name: UNVERIFIED instructions: $bad"
+			[ "$rc" = 1 ] || rc=2
+		fi
+	fi
+done
+
+case $rc in
+1) echo "REFUSING: an instruction the RLX5281 does not implement, or a file that could not be audited" >&2 ;;
+2) echo "UNVERIFIED: an instruction never executed on the RLX5281 -- execute it on the device and extend the list, or remove it" >&2 ;;
+esac
+exit $rc
