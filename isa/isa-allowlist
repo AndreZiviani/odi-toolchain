@@ -1,0 +1,4 @@
+#!/bin/sh
+# isa-audit, the other way round: refuse anything NOT confirmed to execute on
+# the RLX5281. isa-audit has the lists and the reasoning.
+exec "$(dirname "$0")/isa-audit" --allowlist "$@"
