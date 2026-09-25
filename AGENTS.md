@@ -7,7 +7,7 @@ about changing them without breaking a consumer.
 ## What this is
 
 Two container images, built from this repository by CI and pulled by digest
-by three projects: odi-oss (the firmware image), sfp-exporter (`metricsd`)
+by three projects: odi-oss (the firmware image), odi-sfp-exporter (`metricsd`)
 and odi-ui (`confd`). Nothing here builds a firmware or a binary for the
 stick; it builds the compilers that do.
 

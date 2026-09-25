@@ -8,7 +8,7 @@ instead of each building its own.
 | image | what it is | used by |
 |---|---|---|
 | `ghcr.io/andreziviani/odi-toolchain-uclibc` | our own binutils 2.47 (with the Lexra opcodes), gcc 16.2.0 and uClibc-ng 1.0.59, `mips-linux-uclibc`, prefix `/opt/oss`, Linux 6.18 UAPI headers; plus the host tools a kernel build needs | odi-oss: the kernel, busybox, dropbear, iproute2 |
-| `ghcr.io/andreziviani/odi-toolchain-freestanding` | Debian bookworm `gcc-mips-linux-gnu` + binutils + `qemu-mips-static`, for `-nostdlib` binaries | odi-oss `src/` (diag, nv, omcid, ...), sfp-exporter (`metricsd`), odi-ui (`confd`) |
+| `ghcr.io/andreziviani/odi-toolchain-freestanding` | Debian bookworm `gcc-mips-linux-gnu` + binutils + `qemu-mips-static`, for `-nostdlib` binaries | odi-oss `src/` (diag, nv, omcid, ...), odi-sfp-exporter (`metricsd`), odi-ui (`confd`) |
 
 Both images carry the shared ISA gate, `isa-audit` and `isa-allowlist`
 (`isa/`), and `flags.mk`, the target flags with the reasoning behind them.
@@ -62,7 +62,7 @@ fallback when the registry is unreachable, and the way to test a change here:
 A consumer then uses the local tag in place of its pinned reference (each
 consumer documents the variable). A local build is the same recipe but not
 the same image: its digest differs from the published one, since layer
-timestamps differ. The binaries it produces are the same: sfp-exporter
+timestamps differ. The binaries it produces are the same: odi-sfp-exporter
 v1.0.3 and odi-ui v1.0.4 rebuild byte-for-byte identical to their releases
 with it.
 
@@ -103,7 +103,7 @@ mnemonics confirmed on the hardware).
 
 Every row builds the same binaries: an odi-oss image built with v1 or v2
 is identical file for file to one built with the toolchain these images
-replaced, build timestamps aside, and sfp-exporter v1.0.3 and odi-ui v1.0.4
+replaced, build timestamps aside, and odi-sfp-exporter v1.0.3 and odi-ui v1.0.4
 rebuild byte-for-byte to their releases.
 
 ## Releasing
