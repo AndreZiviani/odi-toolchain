@@ -67,6 +67,21 @@ TARCH="-march=mips2 -mno-branch-likely -mdivide-breaks"
 TFLAGS="$TARCH -Os -mabi=32 -EB -msoft-float"
 
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+# Every configure and make goes through this: the full output lands in
+# $WORK/logs, and only a failure prints its tail. A gcc build writes tens of
+# megabytes of command lines, which clips the CI log (BuildKit stops at
+# 2 MiB) long before the audit result that matters is printed.
+LOGS=$WORK/logs
+q() {
+	name=$1; shift
+	mkdir -p "$LOGS"
+	echo "  $name"
+	if ! "$@" > "$LOGS/$name.log" 2>&1; then
+		echo "FAILED: $name -- last lines of $LOGS/$name.log:" >&2
+		tail -60 "$LOGS/$name.log" >&2
+		exit 1
+	fi
+}
 die()  { echo "$*" >&2; exit 1; }
 have() { [ -e "$1" ]; }
 
@@ -100,11 +115,11 @@ if ! have "$PREFIX/bin/$TARGET-as"; then
 		patch -d "$WORK/binutils" -p1 --batch --forward < "$pat"
 	done
 	mkdir -p "$WORK/build-binutils"; cd "$WORK/build-binutils"
-	"$WORK/binutils/configure" \
+	q binutils-configure "$WORK/binutils/configure" \
 		--target="$TARGET" --prefix="$PREFIX" --with-sysroot="$SYSROOT" \
 		--disable-nls --disable-werror --disable-multilib
-	make -j"$JOBS"
-	make install
+	q binutils-make make -j"$JOBS"
+	q binutils-install make install
 	cd /
 fi
 
@@ -140,12 +155,12 @@ if ! have "$PREFIX/bin/$TARGET-gcc"; then
 	gcc_src
 	mkdir -p "$WORK/build-gcc1"; cd "$WORK/build-gcc1"
 	# shellcheck disable=SC2086  # GCC_COMMON is a deliberate word list
-	"$WORK/gcc/configure" $GCC_COMMON \
+	q gcc1-configure "$WORK/gcc/configure" $GCC_COMMON \
 		--enable-languages=c --without-headers --with-newlib \
 		--disable-shared --disable-threads --disable-libatomic \
 		CFLAGS_FOR_TARGET="$TFLAGS"
-	make -j"$JOBS" all-gcc all-target-libgcc
-	make install-gcc install-target-libgcc
+	q gcc1-make make -j"$JOBS" all-gcc all-target-libgcc
+	q gcc1-install make install-gcc install-target-libgcc
 	cd /
 fi
 
@@ -231,9 +246,9 @@ if ! have "$SYSROOT/usr/lib/libc.a"; then
 	# make exits -- which under `set -o pipefail` kills the whole script with
 	# 141 and no message at all.
 	make ARCH=mips oldconfig </dev/null >/dev/null
-	make -j"$JOBS" \
+	q uclibc-make make -j"$JOBS" \
 		CROSS_COMPILE="$TARGET-" ARCH=mips \
-		PREFIX="$SYSROOT" install >/dev/null
+		PREFIX="$SYSROOT" install
 	cd /
 fi
 
@@ -253,15 +268,31 @@ if ! have "$STAGE2_STAMP"; then
 	# thread support on MIPS o32 on this core, the unexercised-combination
 	# territory every other problem in this build came from.
 	# shellcheck disable=SC2086  # GCC_COMMON is a deliberate word list
-	"$WORK/gcc/configure" $GCC_COMMON \
+	q gcc2-configure "$WORK/gcc/configure" $GCC_COMMON \
 		--enable-languages=c --enable-shared --disable-threads \
 		--disable-libatomic \
 		CFLAGS_FOR_TARGET="$TFLAGS"
-	make -j"$JOBS"
-	make install
+	q gcc2-make make -j"$JOBS"
+	q gcc2-install make install
 	touch "$STAGE2_STAMP"
 	cd /
 fi
+
+# ------------------------------------------------ 6. strip the HOST programs
+# cc1, lto1 and lto-dump alone are 300 MB each with their debug info, which
+# is most of the image. Only executables and shared objects for the build
+# host are stripped, recognised by their ELF machine; the target libraries
+# (libc.a, libgcc.a, crt*.o) are MIPS objects and are never touched, so
+# nothing the toolchain links into a binary changes.
+say "stripping the host programs"
+host_machine=$(readelf -h /bin/sh | sed -n 's/^ *Machine: *//p')
+find "$PREFIX/bin" "$PREFIX/libexec" "$PREFIX/$TARGET/bin" -type f |
+while read -r f; do
+	m=$(readelf -h "$f" 2>/dev/null | sed -n 's/^ *Machine: *//p') || true
+	[ "$m" = "$host_machine" ] || continue
+	strip --strip-unneeded "$f"
+	echo "$f"
+done | wc -l | sed "s/\$/ host programs stripped ($host_machine)/;s/^ */  /"
 
 say "built"
 "$PREFIX/bin/$TARGET-gcc" --version | head -1
