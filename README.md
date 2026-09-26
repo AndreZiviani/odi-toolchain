@@ -1,9 +1,19 @@
 # odi-toolchain
 
-The cross toolchains for the ODI DFP-34X-2C2 GPON SFP stick (RTL9601C /
-RTL9602C class, a Lexra **RLX5281** big-endian MIPS core), published as
-container images so the projects that build for it pull one pinned image
-instead of each building its own.
+Part of [odi-oss](https://github.com/AndreZiviani/odi-oss), the open
+firmware for the ODI DFP-34X-2C2 GPON SFP stick.
+
+The stick's CPU, a Realtek RLX5281 (a Lexra core, not a standard MIPS
+implementation), traps on several MIPS instructions that stock
+cross-compilers emit freely (`mul`, `clz`, branch-likely, and others — see
+"The CPU, in one paragraph" below). Every binary shipped to the stick is
+therefore built with pinned compiler flags and audited afterwards for
+forbidden instructions. odi-oss needs a uClibc-ng toolchain targeting that
+CPU plus a matching kernel build, and its freestanding userland tools
+(`diag`, `nv`, `omcid`, `confd`, `metricsd`, ...) need a small, reproducible
+build image. Building gcc, binutils and uClibc-ng from source takes about
+45 minutes, so this repository publishes the results as prebuilt container
+images, pinned by digest, shared by odi-oss, odi-ui and odi-sfp-exporter.
 
 | image | what it is | used by |
 |---|---|---|
@@ -41,13 +51,10 @@ does not fit a hosted runner); on an Apple Silicon Mac Docker runs it under
 emulation, correctly and slower. The freestanding image is `linux/amd64` and
 `linux/arm64`.
 
-**While the packages are private** a pull needs a login first, with a token
-that has `read:packages`:
+The packages are public: an anonymous pull by digest works, no login or
+token needed. A token is only useful to raise the anonymous rate limit:
 
     echo "$TOKEN" | docker login ghcr.io -u <github user> --password-stdin
-
-Nothing in this repository or its consumers depends on that login; once the
-packages are public an anonymous pull by digest works.
 
 ## Building an image locally
 
@@ -136,5 +143,5 @@ headers GPL-2.0 with the syscall-note exception, the Debian packages their
 own. `uclibc/patches/binutils/` is a change to binutils and is GPL-3.0 like
 it; `uclibc/patches/uclibc-ng/` is LGPL-2.1 like uClibc-ng. The build
 scripts, Dockerfiles, the ISA audit and the docs are written for this
-project and, like the rest of the odi-oss tree, carry no license grant yet:
-that is a decision for the maintainer, not one to infer from its absence.
+project and are GPL-2.0-or-later, like the rest of the odi-oss tree; see
+[`LICENSE`](LICENSE).
