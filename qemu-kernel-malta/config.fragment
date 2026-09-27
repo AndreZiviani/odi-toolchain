@@ -1,0 +1,66 @@
+# Overrides applied on top of `make ARCH=mips malta_defconfig`, one per
+# line, in .config syntax (merged with scripts/kconfig/merge_config.sh).
+# This is a STOCK mainline kernel for the QEMU malta board (-M malta) -- nothing
+# from kernel/extra in odi-oss, no odi_* driver, no Lexra flags. It boots
+# odi-oss own rootfs unmodified (busybox init, inittab, services,
+# dropbear, confd, metricsd, sysctls) as an initramfs, standing in for the
+# RTL9602C board and its drivers, which QEMU cannot emulate.
+#
+# malta_defconfig already has PCI, the 8250 serial console and enough of
+# the base system; this fragment adds only what a from-scratch initramfs
+# boot needs and was missing.
+
+# ---- endianness: malta_defconfig defaults to little-endian (QEMU
+# qemu-system-mipsel), but odi-oss ships BIG-endian MIPS binaries (the
+# RTL9602C/RLX5281 is big-endian, kernel/618/config, packages/*/build.sh)
+# and the test harness boots them under qemu-system-mips (big-endian), not
+# qemu-system-mipsel. A little-endian kernel under a big-endian rootfs
+# would not merely look wrong -- exec() of the first big-endian ELF would
+# fail outright. Force big-endian to match.
+CONFIG_CPU_BIG_ENDIAN=y
+# CONFIG_CPU_LITTLE_ENDIAN is not set
+
+# ---- root filesystem: initramfs, not squashfs+block device. Simpler to
+# wire in QEMU (no virtual flash/MTD, no loop device), and "the real
+# rootfs, unmodified" only needs SOME way to get its files into the kernel
+# -- an initramfs cpio built from the same rootfs/skeleton tree odi-oss
+# stages for its squashfs is exactly that.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_TMPFS=y
+CONFIG_TMPFS_POSIX_ACL=y
+
+# squashfs support is kept too (not gzip: odi-oss squashfs is xz, COMP=xz
+# in image/build.sh), in case a future harness mode mounts the real
+# squashfs image directly instead of unpacking it into an initramfs.
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_XZ=y
+
+# ---- console and process management the busybox init chain needs
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_UNIX98_PTYS=y
+CONFIG_LEGACY_PTYS=y
+
+# ---- networking: user-mode net with hostfwd needs a NIC model QEMU
+# malta can present. pcnet32 is the historical default for `-M malta`;
+# virtio-net-pci is offered too since a modern QEMU can attach one over
+# the malta PCI bus and it is materially faster under emulation.
+CONFIG_NET=y
+CONFIG_INET=y
+CONFIG_UNIX=y
+CONFIG_PACKET=y
+CONFIG_NETDEVICES=y
+CONFIG_ETHERNET=y
+CONFIG_NET_VENDOR_AMD=y
+CONFIG_PCNET32=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_NET=y
+
+# ---- nothing here needs a module loader; everything the test harness
+# uses is built in, so the initramfs stays a plain cpio with no /lib/modules.
+# CONFIG_MODULES is not set

@@ -7,8 +7,9 @@ name: ci
 #
 # A tag publishes one image:
 #
-#     uclibc-v<N>        ghcr.io/andreziviani/odi-toolchain-uclibc:v<N>        linux/amd64
-#     freestanding-v<N>  ghcr.io/andreziviani/odi-toolchain-freestanding:v<N>  linux/amd64, linux/arm64
+#     uclibc-v<N>            ghcr.io/andreziviani/odi-toolchain-uclibc:v<N>              linux/amd64
+#     freestanding-v<N>      ghcr.io/andreziviani/odi-toolchain-freestanding:v<N>        linux/amd64, linux/arm64
+#     qemu-malta-v<N>        ghcr.io/andreziviani/odi-toolchain-qemu-kernel-malta:v<N>   linux/amd64
 #
 # Consumers pin the DIGEST printed in the job summary, never the tag: a tag
 # can be moved, a digest cannot. The workflow authenticates with the
@@ -17,12 +18,16 @@ name: ci
 on:
   push:
     branches: [main]
-    tags: ['uclibc-v*', 'freestanding-v*']
+    tags: ['uclibc-v*', 'freestanding-v*', 'qemu-malta-v*']
   pull_request:
   workflow_dispatch:
     inputs:
       uclibc:
         description: also build the uclibc image (about an hour), without pushing it
+        type: boolean
+        default: false
+      qemu_kernel:
+        description: also build the qemu-kernel-malta image (about ten minutes), without pushing it
         type: boolean
         default: false
 
@@ -85,6 +90,34 @@ jobs:
       - name: Build the uclibc image (not pushed)
         run: make uclibc JOBS=$(nproc)
 
+  qemu-kernel-check:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.qemu_kernel }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the qemu-kernel-malta image (not pushed)
+        run: make qemu-kernel-malta JOBS=$(nproc)
+      - name: Boot smoke test -- odi-oss out/busybox as init, look for a marker line
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-mips cpio
+          id=$(docker create odi-toolchain-qemu-kernel-malta:local)
+          docker cp "$id":/boot/vmlinux ./vmlinux
+          docker rm "$id"
+          mkdir -p initramfs/bin
+          # A static, big-endian MIPS busybox is enough to prove the kernel
+          # boots and runs odi-oss-shaped userland; it does not have to be
+          # odi-oss's own build, which this workflow does not have.
+          curl -fsSL -o initramfs/bin/busybox \
+            https://busybox.net/downloads/binaries/1.35.0-mipseb-linux-musl/busybox
+          chmod +x initramfs/bin/busybox
+          printf '#!/bin/busybox sh\n/bin/busybox --install -s /bin\necho QEMU-KERNEL-MALTA-BOOT-OK\npoweroff -f\n' > initramfs/init
+          chmod +x initramfs/init
+          ( cd initramfs && find . | cpio -o -H newc | gzip ) > initramfs.cpio.gz
+          timeout 60 qemu-system-mips -M malta -kernel vmlinux -initrd initramfs.cpio.gz \
+            -append "console=ttyS0 rdinit=/init" -m 64M -nographic -no-reboot | tee boot.log || true
+          grep -q QEMU-KERNEL-MALTA-BOOT-OK boot.log
+
   publish:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
@@ -99,12 +132,18 @@ jobs:
         id: which
         run: |
           tag=${GITHUB_REF#refs/tags/}
+          # tag_prefix is the tag family; flavour is the Dockerfile
+          # directory AND the image name suffix -- the two differ for the
+          # qemu kernel (tag qemu-malta-vN, directory/image qemu-kernel-malta,
+          # the same short name the tag family already uses for what board
+          # it targets).
           case $tag in
-          uclibc-v*)       flavour=uclibc;       platforms=linux/amd64 ;;
-          freestanding-v*) flavour=freestanding; platforms=linux/amd64,linux/arm64 ;;
+          uclibc-v*)       tag_prefix=uclibc;       flavour=uclibc;            platforms=linux/amd64 ;;
+          freestanding-v*) tag_prefix=freestanding; flavour=freestanding;      platforms=linux/amd64,linux/arm64 ;;
+          qemu-malta-v*)   tag_prefix=qemu-malta;    flavour=qemu-kernel-malta; platforms=linux/amd64 ;;
           *) echo "::error::unknown tag $tag"; exit 1 ;;
           esac
-          ver=${tag#"$flavour"-}
+          ver=${tag#"$tag_prefix"-}
           {
             echo "flavour=$flavour"
             echo "platforms=$platforms"
@@ -126,6 +165,12 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           make lint
           make test
+
+      - name: Lint first
+        if: steps.which.outputs.flavour == 'qemu-kernel-malta'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          make lint
 
       - name: QEMU for the arm64 build
         if: contains(steps.which.outputs.platforms, 'arm64')
@@ -173,5 +218,21 @@ jobs:
             ;;
           freestanding)
             docker run --rm -v "$PWD":/t -w /t "$img" sh test/run.sh
+            ;;
+          qemu-kernel-malta)
+            sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-mips cpio
+            id=$(docker create --platform linux/amd64 "$img")
+            docker cp "$id":/boot/vmlinux ./vmlinux
+            docker rm "$id"
+            mkdir -p initramfs/bin
+            curl -fsSL -o initramfs/bin/busybox \
+              https://busybox.net/downloads/binaries/1.35.0-mipseb-linux-musl/busybox
+            chmod +x initramfs/bin/busybox
+            printf '#!/bin/busybox sh\n/bin/busybox --install -s /bin\necho QEMU-KERNEL-MALTA-BOOT-OK\npoweroff -f\n' > initramfs/init
+            chmod +x initramfs/init
+            ( cd initramfs && find . | cpio -o -H newc | gzip ) > initramfs.cpio.gz
+            timeout 60 qemu-system-mips -M malta -kernel vmlinux -initrd initramfs.cpio.gz \
+              -append "console=ttyS0 rdinit=/init" -m 64M -nographic -no-reboot | tee boot.log || true
+            grep -q QEMU-KERNEL-MALTA-BOOT-OK boot.log
             ;;
           esac

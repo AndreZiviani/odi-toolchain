@@ -19,9 +19,12 @@ images, pinned by digest, shared by odi-oss, odi-ui and odi-sfp-exporter.
 |---|---|---|
 | `ghcr.io/andreziviani/odi-toolchain-uclibc` | our own binutils 2.47 (with the Lexra opcodes), gcc 16.2.0 and uClibc-ng 1.0.59, `mips-linux-uclibc`, prefix `/opt/oss`, Linux 6.18 UAPI headers; plus the host tools a kernel build needs | odi-oss: the kernel, busybox, dropbear, iproute2 |
 | `ghcr.io/andreziviani/odi-toolchain-freestanding` | Debian bookworm `gcc-mips-linux-gnu` + binutils + `qemu-mips-static`, for `-nostdlib` binaries | odi-oss `src/` (diag, nv, omcid, ...), odi-sfp-exporter (`metricsd`), odi-ui (`confd`) |
+| `ghcr.io/andreziviani/odi-toolchain-qemu-kernel-malta` | a STOCK mainline Linux 6.18.53, `malta_defconfig` + `qemu-kernel-malta/config.fragment`, built with the same `gcc-mips-linux-gnu` as the freestanding image -- just `vmlinux` and its `.config`, no odi-oss kernel code at all | odi-oss `make test-qemu`: boots the real rootfs under `qemu-system-mips -M malta`, standing in for the RTL9602C board qemu cannot emulate |
 
-Both images carry the shared ISA gate, `isa-audit` and `isa-allowlist`
-(`isa/`), and `flags.mk`, the target flags with the reasoning behind them.
+Both toolchain images carry the shared ISA gate, `isa-audit` and
+`isa-allowlist` (`isa/`), and `flags.mk`, the target flags with the
+reasoning behind them; the qemu kernel image carries neither, since it
+never runs odi-oss code, only odi-oss's rootfs on top of a stock kernel.
 
 Both are **minimal**: they carry what it takes to use the toolchain, not
 what it took to build it, so a consumer pulls a fraction of the build. The
@@ -61,9 +64,10 @@ token needed. A token is only useful to raise the anonymous rate limit:
 Every image can be built from this repository instead of pulled -- the
 fallback when the registry is unreachable, and the way to test a change here:
 
-    make freestanding    # odi-toolchain-freestanding:local, about two minutes
-    make uclibc          # odi-toolchain-uclibc:local, about an hour (JOBS=4)
-    make test            # the ISA audit self-test, in the freestanding image
+    make freestanding      # odi-toolchain-freestanding:local, about two minutes
+    make uclibc            # odi-toolchain-uclibc:local, about an hour (JOBS=4)
+    make qemu-kernel-malta  # odi-toolchain-qemu-kernel-malta:local, about ten minutes (JOBS=4)
+    make test              # the ISA audit self-test, in the freestanding image
     make lint
 
 A consumer then uses the local tag in place of its pinned reference (each
@@ -105,6 +109,7 @@ mnemonics confirmed on the hardware).
 |---|---|---|
 | `uclibc-v2` | `ghcr.io/andreziviani/odi-toolchain-uclibc:v2@sha256:5305427b3e87eb2e3f2416778e68cbbb46c3f8b3dfb1317b52eedad803115910` | minimal: bookworm-slim final stage, host programs stripped; same target libraries as v1 |
 | `freestanding-v2` | `ghcr.io/andreziviani/odi-toolchain-freestanding:v2@sha256:a0342d9662553d725b29be891d5647393f76768c7cf3decb34b4f4bb2e0de611` | minimal: `qemu-mips-static` only, `python3-minimal`; same compiler as v1 |
+| `qemu-malta-v1` | `ghcr.io/andreziviani/odi-toolchain-qemu-kernel-malta:v1@<see the tag run's job summary>` | first release: linux-6.18.53, `malta_defconfig` + `qemu-kernel-malta/config.fragment`, `vmlinux` + `.config` only |
 | `uclibc-v1` | `ghcr.io/andreziviani/odi-toolchain-uclibc:v1@sha256:804c8b4b30d61c93663a6bf3986c075680bb1894d81a95d0fff4738ef4472ed1` | first release; superseded by v2 |
 | `freestanding-v1` | `ghcr.io/andreziviani/odi-toolchain-freestanding:v1@sha256:e1e6ae4da43a9246347b39a50241a2eca953e383e7c5624492d82c034ec90686` | first release; superseded by v2 |
 
@@ -117,6 +122,7 @@ rebuild byte-for-byte to their releases.
 
     git tag -s freestanding-v3 && git push origin freestanding-v3
     git tag -s uclibc-v3 && git push origin uclibc-v3
+    git tag -s qemu-malta-v2 && git push origin qemu-malta-v2
 
 The workflow builds and pushes the image and prints its digest; update the
 pin in each consumer by hand, in its own branch, and rebuild there. Versions
@@ -124,10 +130,13 @@ are plain integers and never reused.
 
 ## Layout
 
-    uclibc/Dockerfile        the uclibc image: a build stage, then slim base + stripped /opt/oss
-    uclibc/build.sh          binutils, headers, gcc (two stages), uClibc-ng
-    uclibc/audit-libs.sh     the target-library audit; odi-audit-libs in the image
-    uclibc/patches/          binutils (the Lexra opcodes) and uClibc-ng patches
+    uclibc/Dockerfile              the uclibc image: a build stage, then slim base + stripped /opt/oss
+    uclibc/build.sh                binutils, headers, gcc (two stages), uClibc-ng
+    uclibc/audit-libs.sh           the target-library audit; odi-audit-libs in the image
+    uclibc/patches/                binutils (the Lexra opcodes) and uClibc-ng patches
+    qemu-kernel-malta/Dockerfile   the qemu kernel image: cross-gcc build stage, then just vmlinux + .config
+    qemu-kernel-malta/build.sh     fetch, verify, malta_defconfig + fragment, build vmlinux
+    qemu-kernel-malta/config.fragment  the overrides on top of malta_defconfig (initramfs, net, console)
     freestanding/Dockerfile  the freestanding image
     isa/isa-audit            the ISA gate; isa-allowlist is the same script
     flags.mk                 target flags for both baselines, and why

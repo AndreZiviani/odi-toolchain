@@ -1,13 +1,34 @@
 # Changelog
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-adapted for this repository's two independently versioned image tracks
-(`uclibc-vN`, `freestanding-vN`). Entries below are grouped by track, newest
-first within each track, because the two tracks change for unrelated
-reasons (a uClibc-ng bump versus a Debian toolchain bump) and reading them
-interleaved by date would mix those stories together.
+adapted for this repository's independently versioned image tracks
+(`uclibc-vN`, `freestanding-vN`, `qemu-malta-vN`). Entries below are grouped
+by track, newest first within each track, because the tracks change for
+unrelated reasons (a uClibc-ng bump versus a Debian toolchain bump versus a
+kernel.org release) and reading them interleaved by date would mix those
+stories together.
 
 ## Unreleased
+
+## qemu-malta-v1 (2026-09-27)
+
+### Added
+- First release: a STOCK mainline linux-6.18.53 for QEMU `-M malta`,
+  `malta_defconfig` + `qemu-kernel-malta/config.fragment` (initramfs,
+  devtmpfs/tmpfs, pcnet32/virtio-net, big-endian to match odi-oss's own
+  rootfs binaries -- malta_defconfig defaults to little-endian, which
+  would refuse to exec the first big-endian ELF), built with the same
+  `gcc-mips-linux-gnu` cross toolchain as `odi-toolchain-freestanding`.
+  Published stage is just `vmlinux` and the `.config` that produced it --
+  no odi-oss kernel code, no odi_* driver, nothing Lexra-specific.
+- Built for odi-oss's qemu full-system test harness (`make test-qemu`,
+  odi-oss `docs/HACKING.md`): odi-oss boots its own rootfs unmodified on
+  top of this kernel, standing in for the RTL9602C board qemu cannot
+  emulate.
+- Boot-tested locally: odi-oss's own prebuilt big-endian busybox as
+  `rdinit`, `qemu-system-mips -M malta -m 64M`, reaches a shell and prints
+  `/proc/cpuinfo` (MIPS 24Kc, the qemu malta CPU model) before a clean
+  `poweroff`.
 
 ## uclibc-v2 (2026-09-25)
 
