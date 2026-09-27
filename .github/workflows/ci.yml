@@ -33,6 +33,35 @@ env:
   REGISTRY: ghcr.io/andreziviani
 
 jobs:
+  changelog:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require a CHANGELOG entry for non-docs changes
+        run: |
+          if printf "%s\n" "${{ join(github.event.pull_request.labels.*.name, ' ') }}" | grep -qw no-changelog; then
+            echo "changelog: no-changelog label set, skipping"
+            exit 0
+          fi
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          echo "$changed"
+          # docs-only/CI-only paths: markdown files, the license, and workflow
+          # files under .github/. Anything else counts as user- or build-facing.
+          non_docs=$(printf "%s\n" "$changed" | grep -Ev '\.md$|^LICENSE$|^\.github/' || true)
+          if [ -z "$non_docs" ]; then
+            echo "changelog: docs-only or CI-only change, skipping"
+            exit 0
+          fi
+          if ! printf "%s\n" "$changed" | grep -qx "CHANGELOG.md"; then
+            echo "::error::this PR changes $(printf '%s' "$non_docs" | tr '\n' ' ') but does not touch CHANGELOG.md -- add an entry under Unreleased, or apply the no-changelog label"
+            exit 1
+          fi
+          echo "changelog: entry present"
+
   check:
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest

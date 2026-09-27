@@ -60,6 +60,10 @@ workflow_dispatch with `uclibc: true`.
   line in the outer shell. `make lint` enforces it; rephrase, do not escape.
 - **Scripts run on macOS and Linux hosts**, but everything that compiles
   runs inside an image, where the environment is Debian bookworm.
+- **Every change that affects users, the build, or the docs adds an entry
+  under `## Unreleased` in `CHANGELOG.md`**, in the same commit as the
+  change. A release moves `Unreleased` into a version section named after
+  the tag that publishes it.
 
 ## Commit style
 
