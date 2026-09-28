@@ -29,8 +29,25 @@ CONFIG_BLK_DEV_INITRD=y
 CONFIG_RD_GZIP=y
 CONFIG_DEVTMPFS=y
 CONFIG_DEVTMPFS_MOUNT=y
+
+# ---- filesystem/mm options odi-oss's OWN rootfs depends on at runtime
+# (/etc/fstab: tmpfs /var, tmpfs /var/tmp, jffs2 config partition), pinned
+# here explicitly rather than left to whatever malta_defconfig happens to
+# default to. This is the exact class of drift that shipped a flashable
+# image whose kernel/618/config had neither CONFIG_SHMEM nor CONFIG_TMPFS
+# (v1.0.2 through v1.0.4-rc1: a capped tmpfs mount rejects size= and falls
+# back to the ramfs-backed !CONFIG_SHMEM stub in mm/shmem.c) while this
+# qemu kernel booted the same rcS/fstab fine, because CONFIG_TMPFS here was
+# already on -- test-qemu never exercised the mismatch. Keep this list a
+# superset of kernel/618/config's filesystem/mm block by hand (there is no
+# automated inheritance across the two repos); test/qemu/run-qemu.sh's
+# fstab-mounts assertion (odi-oss) is what actually catches a future drift,
+# not this comment alone.
+CONFIG_SHMEM=y
 CONFIG_TMPFS=y
 CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_MTD=y
+CONFIG_JFFS2_FS=y
 
 # squashfs support is kept too (not gzip: odi-oss squashfs is xz, COMP=xz
 # in image/build.sh), in case a future harness mode mounts the real

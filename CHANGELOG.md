@@ -10,6 +10,23 @@ stories together.
 
 ## Unreleased
 
+### Changed
+- `qemu-kernel-malta/config.fragment` now pins `CONFIG_SHMEM`,
+  `CONFIG_TMPFS_POSIX_ACL`, `CONFIG_MTD` and `CONFIG_JFFS2_FS` explicitly
+  alongside the `CONFIG_TMPFS` already there, mirroring the filesystem/mm
+  symbols odi-oss's own `rootfs/skeleton/etc/fstab` depends on
+  (`kernel/618/config`, odi-oss), instead of leaving them to whatever
+  `malta_defconfig` happens to default to. Prompted by odi-oss v1.0.2
+  through v1.0.4-rc1 shipping a flashable kernel with neither
+  `CONFIG_SHMEM` nor `CONFIG_TMPFS` while this image had `CONFIG_TMPFS` on
+  the whole time -- `test-qemu` never had a chance to catch the mismatch.
+  **No image rebuild or new tag**: a built `.config` diffed byte-for-byte
+  identical before and after (every symbol added was already selected by
+  `malta_defconfig`'s own defaults), so `qemu-malta-v1` still stands and
+  odi-oss's digest pin is unchanged. The value of this change is
+  documentary -- an explicit line here is not left to an implicit default
+  drifting out from under it unnoticed a second time.
+
 ## uclibc-v4 (2026-10-21)
 
 ### Changed
