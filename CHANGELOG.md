@@ -10,6 +10,10 @@ stories together.
 
 ## Unreleased
 
+- AGENTS.md has a release checklist: every change since the last tag has an
+  entry, no merge debris, `Unreleased` moved into the tag section, and the
+  published notes checked.
+
 ## qemu-malta-v1 (2026-09-27)
 
 ### Added
