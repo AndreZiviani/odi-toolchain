@@ -10,6 +10,9 @@ stories together.
 
 ## Unreleased
 
+## uclibc-v3 (2026-10-13)
+
+### Fixed
 - uclibc: `syslog()` reconnects when the syslogd socket refuses
   (`ECONNREFUSED`, `ENOTCONN`), not only on `ECONNRESET`
   (`patches/uclibc-ng/0002-syslog-reconnect-on-econnrefused.patch`). A
@@ -17,8 +20,13 @@ stories together.
   so every program logging through libc lost its first line after each
   restart (busybox klogd on the ODI stick dropped the first kernel line).
   One retry per message. Changes libc code generation: needs a new
-  `uclibc-v<N>` and a rebuild check in the consumers.
+  `uclibc-v<N>` and a rebuild check in the consumers. Checked: an odi-oss
+  rebuild differs only in dropbear (busybox masked by its build stamp), and
+  on a stick klogd keeps the first kernel line after a syslogd restart.
 
+### Changed
+- ci: the qemu-kernel-malta boot check no longer downloads busybox.
+- README: the qemu-malta-v1 digest is filled in.
 - AGENTS.md has a release checklist: every change since the last tag has an
   entry, no merge debris, `Unreleased` moved into the tag section, and the
   published notes checked.
