@@ -1,0 +1,46 @@
+syslog: reconnect when the syslogd socket refuses, not only on reset
+
+vsyslog() reopens the log socket only on ECONNRESET. The socket is a
+connected AF_UNIX datagram socket by default, and once syslogd restarts
+(its /dev/log is unlinked and created again) a send on the old socket
+fails with ECONNREFUSED. That falls to the default case: the socket is
+closed, the message goes to the console and is lost, and only the next
+call reconnects. So every program logging through syslog() loses one
+line per syslogd restart. On the ODI stick, busybox klogd is one of them:
+the first kernel line after a syslogd restart never reaches syslog
+(observed on hardware, 2026-10-13). glibc retries a failed send once
+after reconnecting, whatever the error.
+
+Treat ECONNREFUSED and ENOTCONN like ECONNRESET, and bound the reopen
+to one retry per message so a socket that keeps failing cannot loop.
+
+Worth reporting upstream; it is a real bug, not a local quirk.
+
+--- a/libc/misc/syslog/syslog.c
++++ b/libc/misc/syslog/syslog.c
+@@ -199,6 +199,7 @@
+ 	time_t now;
+ 	int fd, saved_errno;
+ 	int rc;
++	int reopened = 0;
+ 	char tbuf[1024]; /* syslogd is unable to handle longer messages */
+ 
+ 	/* Just throw out this message if pri has bad bits. */
+@@ -283,8 +284,16 @@
+ 				case EINTR:
+ 					break;
+ 				case ECONNRESET:
+-					/* syslogd restarted, reopen log */
++				case ECONNREFUSED:
++				case ENOTCONN:
++					/* syslogd restarted, reopen log: a stream socket
++					 * reports ECONNRESET, but the datagram socket used
++					 * by default reports ECONNREFUSED once the old
++					 * syslogd socket is gone. Retry once, so a syslogd
++					 * that accepts and then refuses cannot loop here. */
+ 					closelog_intern(1);
++					if (reopened++)
++						goto write_err;
+ 					openlog_intern();
+ 					goto retry;
+ 				case EAGAIN:

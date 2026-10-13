@@ -10,6 +10,15 @@ stories together.
 
 ## Unreleased
 
+- uclibc: `syslog()` reconnects when the syslogd socket refuses
+  (`ECONNREFUSED`, `ENOTCONN`), not only on `ECONNRESET`
+  (`patches/uclibc-ng/0002-syslog-reconnect-on-econnrefused.patch`). A
+  connected datagram socket reports `ECONNREFUSED` after syslogd restarts,
+  so every program logging through libc lost its first line after each
+  restart (busybox klogd on the ODI stick dropped the first kernel line).
+  One retry per message. Changes libc code generation: needs a new
+  `uclibc-v<N>` and a rebuild check in the consumers.
+
 - AGENTS.md has a release checklist: every change since the last tag has an
   entry, no merge debris, `Unreleased` moved into the tag section, and the
   published notes checked.
