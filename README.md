@@ -108,6 +108,7 @@ mnemonics confirmed on the hardware).
 | tag | reference | notes |
 |---|---|---|
 | `uclibc-v2` | `ghcr.io/andreziviani/odi-toolchain-uclibc:v2@sha256:5305427b3e87eb2e3f2416778e68cbbb46c3f8b3dfb1317b52eedad803115910` | minimal: bookworm-slim final stage, host programs stripped; same target libraries as v1 |
+| `uclibc-v3` | `ghcr.io/andreziviani/odi-toolchain-uclibc:v3@sha256:fa9f1d9dd45b74ea0b10b3f9a74700782438875d9457a7aaf9161077109f5e68` | `syslog()` reconnects on `ECONNREFUSED` (patch 0002); otherwise as v2 |
 | `freestanding-v2` | `ghcr.io/andreziviani/odi-toolchain-freestanding:v2@sha256:a0342d9662553d725b29be891d5647393f76768c7cf3decb34b4f4bb2e0de611` | minimal: `qemu-mips-static` only, `python3-minimal`; same compiler as v1 |
 | `qemu-malta-v1` | `ghcr.io/andreziviani/odi-toolchain-qemu-kernel-malta:v1@sha256:28811eeb779d8a4e5585e3789c82b21fc30825bec75dfbeae3fcb4d4055b843f` | first release: linux-6.18.53, `malta_defconfig` + `qemu-kernel-malta/config.fragment`, `vmlinux` + `.config` only |
 | `uclibc-v1` | `ghcr.io/andreziviani/odi-toolchain-uclibc:v1@sha256:804c8b4b30d61c93663a6bf3986c075680bb1894d81a95d0fff4738ef4472ed1` | first release; superseded by v2 |

@@ -10,6 +10,8 @@ stories together.
 
 ## Unreleased
 
+- README: the uclibc-v3 digest is filled in.
+
 ## uclibc-v3 (2026-10-13)
 
 ### Fixed
