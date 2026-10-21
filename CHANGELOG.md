@@ -10,6 +10,8 @@ stories together.
 
 ## Unreleased
 
+## uclibc-v4 (2026-10-21)
+
 ### Changed
 - `bltzl` is off the ISA allow list and on the deny list of `isa-audit` and
   `isa-allowlist`, and `uclibc/audit-libs.sh` refuses it. It was listed as
@@ -23,10 +25,18 @@ stories together.
   could have passed the gate. `test/run.sh` now asserts the refusal. The other
   branch-likely forms were never executed and stay unverified (exit 2 from
   `isa-allowlist`). README, `flags.mk` and the build comments are corrected.
-  **No image rebuild or new tag**: consumers pick the change up with the
-  next `uclibc-vN` / `freestanding-vN` release and a digest bump.
 
 - README: the uclibc-v3 digest is filled in.
+
+## freestanding-v3 (2026-10-21)
+
+### Changed
+- `bltzl` is off the ISA allow list and on the deny list of `isa-audit` and
+  `isa-allowlist` (both installed in this image). It was listed as confirmed
+  to run, from a probe that could only see SIGILL; a probe that checks the
+  delay slot and the branch (`isa/probes/bltzl.S`) shows it misexecuting on
+  the RLX5281 with both operand signs (`slot=1 fell=1`). Same entry as
+  uclibc-v4; the compiler itself is unchanged.
 
 ## uclibc-v3 (2026-10-13)
 
