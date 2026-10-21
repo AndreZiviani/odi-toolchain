@@ -15,8 +15,10 @@
 #     built -march=mips1.
 #   - At mips1 gcc cannot emit any of the five instructions measured illegal:
 #     mul and clz are SPECIAL2 (mips32), beql/bnel are MIPS-II, and the
-#     divide-by-zero check becomes `break` rather than `teq`. Nothing needs
-#     suppressing, so no flag can be forgotten.
+#     divide-by-zero check becomes `break` rather than `teq`. Nor can it emit
+#     bltzl, which decodes but misexecutes (delay slot always runs; see
+#     isa/probes/bltzl.S). Nothing needs suppressing, so no flag can be
+#     forgotten.
 #   - The one thing mips2 would add that works on this core is ll/sc.
 #     Freestanding code is single-threaded and has no use for it.
 #

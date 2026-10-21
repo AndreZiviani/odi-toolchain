@@ -2,7 +2,7 @@
 # Self-test for the freestanding image and the ISA audit, run inside the
 # image (make test). Builds three tiny programs and checks that the audit
 # says what it must about each: clean at mips1, a trap at mips32 (mul), and
-# unverified at mips32r2 (seb). Then runs the clean one under qemu.
+# unverified at mips32r2 (seb), refused on bltzl. Then runs the clean one under qemu.
 set -eu
 cd "$(dirname "$0")"
 out=$(mktemp -d)
@@ -15,6 +15,9 @@ L="-nostdlib -nostartfiles -static -Wl,-e,_start -Wl,--build-id=none"
 	$CC -march=mips1    $F $L -o "$out/ok"  start.S ok.c
 	$CC -march=mips32   $F $L -o "$out/mul" start.S mul.c
 	$CC -march=mips32r2 $F $L -o "$out/seb" start.S seb.c
+	# bltzl decodes but misexecutes on the device (isa/probes/bltzl.S), so
+	# the gate must refuse it from both sides.
+	$CC -march=mips2    $F $L -o "$out/bltzl" ../isa/probes/bltzl.S
 }
 fail=0
 expect() {
@@ -32,6 +35,8 @@ expect 1 isa-audit     "$out/mul"
 expect 1 isa-allowlist "$out/mul"
 expect 0 isa-audit     "$out/seb"
 expect 2 isa-allowlist "$out/seb"
+expect 1 isa-audit     "$out/bltzl"
+expect 1 isa-allowlist "$out/bltzl"
 expect 1 isa-audit     run.sh
 expect 0 qemu-mips-static "$out/ok"
 [ "$fail" = 0 ] && echo "selftest: all passed"
