@@ -37,6 +37,6 @@ lint:
 	shellcheck -S warning -s sh isa/isa-audit isa/isa-allowlist
 	@# The rule the other ODI repos keep: no apostrophe in a shell comment,
 	@# since one inside a single-quoted inline block ends the block.
-	@if grep -nE "^[[:space:]]*#.*'" uclibc/*.sh common/*.sh test/*.sh isa/* qemu-kernel-malta/*.sh; then \
+	@if grep -nE "^[[:space:]]*#.*'" uclibc/*.sh common/*.sh test/*.sh isa/isa-* qemu-kernel-malta/*.sh; then \
 		echo "lint: apostrophe in a shell comment above -- rephrase" >&2; exit 1; fi
 	@echo "lint: clean"

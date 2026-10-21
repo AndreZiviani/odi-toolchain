@@ -10,6 +10,22 @@ stories together.
 
 ## Unreleased
 
+### Changed
+- `bltzl` is off the ISA allow list and on the deny list of `isa-audit` and
+  `isa-allowlist`, and `uclibc/audit-libs.sh` refuses it. It was listed as
+  confirmed to run, from a probe that could only see SIGILL. A probe that
+  checks the two things a branch-likely must do (new `isa/probes/bltzl.S`)
+  shows the instruction decoding but misexecuting on the RLX5281: with both a
+  negative and a non-negative operand the delay slot runs and control falls
+  through (`slot=1 fell=1`), and another open implementation measured the
+  same. Nothing shipped contains it (`-mno-branch-likely`, mips1 freestanding),
+  so this only closes the gap where hand-written assembler in a libc or libgcc
+  could have passed the gate. `test/run.sh` now asserts the refusal. The other
+  branch-likely forms were never executed and stay unverified (exit 2 from
+  `isa-allowlist`). README, `flags.mk` and the build comments are corrected.
+  **No image rebuild or new tag**: consumers pick the change up with the
+  next `uclibc-vN` / `freestanding-vN` release and a digest bump.
+
 - README: the uclibc-v3 digest is filled in.
 
 ## uclibc-v3 (2026-10-13)

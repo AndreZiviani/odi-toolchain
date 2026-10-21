@@ -91,9 +91,12 @@ with it.
 ## The CPU, in one paragraph
 
 The RLX5281 implements ISA levels in pieces. Measured by executing each
-instruction on the device: `lwl lwr swl swr`, `movz movn`, `ll sc sync`,
-`bltzl` and `madd` run; `mul`, `clz`, `teq`, `beql` and `bnel` trap. So the
-freestanding baseline is `-march=mips1`, which can emit none of the five and
+instruction on the device: `lwl lwr swl swr`, `movz movn`, `ll sc sync`
+and `madd` run; `mul`, `clz`, `teq`, `beql` and `bnel` trap; `bltzl` decodes
+but misexecutes (its delay slot always runs and control always falls
+through, taken or not; `isa/probes/bltzl.S` shows it in two lines of output,
+and an earlier "bltzl runs" came from a probe that could only see SIGILL).
+So the freestanding baseline is `-march=mips1`, which can emit none of the six and
 runs on the stock OEM image too, and the uClibc baseline is `-march=mips2
 -mno-branch-likely -mdivide-breaks`, which keeps `ll`/`sc` for the libc and
 suppresses the rest -- in the target libraries as well as the application,
@@ -140,6 +143,7 @@ are plain integers and never reused.
     qemu-kernel-malta/config.fragment  the overrides on top of malta_defconfig (initramfs, net, console)
     freestanding/Dockerfile  the freestanding image
     isa/isa-audit            the ISA gate; isa-allowlist is the same script
+    isa/probes/bltzl.S       the on-device probe that put bltzl on the deny list
     flags.mk                 target flags for both baselines, and why
     common/apt-snapshot.sh   freezes apt at a snapshot.debian.org timestamp
     test/run.sh              ISA audit self-test (make test)

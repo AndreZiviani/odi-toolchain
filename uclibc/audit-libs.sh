@@ -23,8 +23,9 @@ OBJDUMP=$PREFIX/bin/$TARGET-objdump
 
 # Measured by executing each one on the device. beqzl/bnezl are assembler
 # aliases for beql/bnel against $zero: omitting them once under-reported a
-# binary by 62 instructions.
-ILLEGAL='^(mul|clz|teq|beql|bnel|beqzl|bnezl)$'
+# binary by 62 instructions. bltzl does not trap but misexecutes (the delay
+# slot runs and control falls through, taken or not), so it is refused too.
+ILLEGAL='^(mul|clz|teq|beql|bnel|beqzl|bnezl|bltzl)$'
 
 # hardcfr.o is the GCC hardened control-flow redundancy runtime, pulled in
 # only by -fharden-control-flow-redundancy, which nothing here compiles with.

@@ -17,8 +17,10 @@
 # that implements ISA levels in pieces. Measured by executing each instruction
 # on the device:
 #
-#     ok:       lwl lwr swl swr, movz movn, ll sc sync, bltzl, madd
+#     ok:       lwl lwr swl swr, movz movn, ll sc sync, madd
 #     ILLEGAL:  mul, clz, teq, beql, bnel
+#     WRONG:    bltzl decodes but misexecutes (delay slot always runs, no
+#               nullify, taken or not); see isa/probes/bltzl.S
 #
 # So the target is mips2 -- which gives the libc native ll/sc atomics -- with
 # the three illegal MIPS-II instructions suppressed by flags (flags.mk has

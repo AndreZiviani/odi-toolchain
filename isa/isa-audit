@@ -17,8 +17,13 @@
 # The RLX5281 is a Lexra MIPS core that implements ISA levels in pieces,
 # measured by executing each instruction on an ODI DFP-34X-2C2:
 #
-#     ok:       lwl lwr swl swr, movz movn, ll sc sync, bltzl, madd
+#     ok:       lwl lwr swl swr, movz movn, ll sc sync, madd
 #     ILLEGAL:  mul, clz, teq, beql, bnel
+#     WRONG:    bltzl decodes but misexecutes: the delay slot runs and
+#               control falls through, taken or not (isa/probes/bltzl.S,
+#               run on the device 2026-10-20; another open implementation
+#               measured the same). It was once listed ok, from a probe that
+#               could only see SIGILL.
 #
 # A binary carrying one builds clean, links clean, and traps on the device
 # the first time that code path runs -- which is why this is a gate that
@@ -70,8 +75,11 @@ pick() {
 OBJDUMP=${OBJDUMP:-$(pick objdump)}
 READELF=${READELF:-$(pick readelf)}
 
-# The conditional-trap family, branch-likely, and the SPECIAL2 pair.
-DENY='^(mul|clz|clo|teq|tne|tge|tgeu|tlt|tltu|teqi|tnei|tgei|tgeiu|tlti|tltiu|beql|bnel|beqzl|bnezl)$'
+# The conditional-trap family, branch-likely, and the SPECIAL2 pair. bltzl is
+# here because it was measured misexecuting. The other branch-likely forms
+# (bgezl blezl bgtzl bltzall bgezall) were never executed, so they are not on
+# the allow list and isa-allowlist reports them as unverified.
+DENY='^(mul|clz|clo|teq|tne|tge|tgeu|tlt|tltu|teqi|tnei|tgei|tgeiu|tlti|tltiu|beql|bnel|beqzl|bnezl|bltzl)$'
 # The RLX5281 has no FPU. Any FP mnemonic (add.s, cvt.d.w, c.eq.s) or a
 # coprocessor-1 move, load or branch is a soft-float build gone wrong.
 FP='^([a-z][a-z0-9]*[.][a-z0-9.]+|mfc1|mtc1|cfc1|ctc1|lwc1|swc1|ldc1|sdc1|bc1f|bc1t|bc1fl|bc1tl)$'
@@ -80,7 +88,7 @@ FP='^([a-z][a-z0-9]*[.][a-z0-9.]+|mfc1|mtc1|cfc1|ctc1|lwc1|swc1|ldc1|sdc1|bc1f|b
 # instructions the kernel executes on every boot. move, li, b, bal, neg,
 # negu, not, nop and beqz/bnez are objdump spellings of MIPS-I encodings.
 # Grow this only by executing an instruction on the device.
-ALLOW='^(add|addi|addiu|addu|and|andi|b|bal|beq|beqz|bgez|bgezal|bgtz|blez|bltz|bltzal|bne|bnez|break|div|divu|j|jal|jalr|jr|lb|lbu|lh|lhu|li|lui|lw|lwl|lwr|mfhi|mflo|move|mthi|mtlo|mult|multu|neg|negu|nop|nor|not|or|ori|sb|sh|sll|sllv|slt|slti|sltiu|sltu|sra|srav|srl|srlv|sub|subu|sw|swl|swr|syscall|xor|xori|movz|movn|ll|sc|sync|madd|bltzl|mfc0|mtc0|eret|tlbwi|tlbwr|tlbp|tlbr|cache|wait|rfe)$'
+ALLOW='^(add|addi|addiu|addu|and|andi|b|bal|beq|beqz|bgez|bgezal|bgtz|blez|bltz|bltzal|bne|bnez|break|div|divu|j|jal|jalr|jr|lb|lbu|lh|lhu|li|lui|lw|lwl|lwr|mfhi|mflo|move|mthi|mtlo|mult|multu|neg|negu|nop|nor|not|or|ori|sb|sh|sll|sllv|slt|slti|sltiu|sltu|sra|srav|srl|srlv|sub|subu|sw|swl|swr|syscall|xor|xori|movz|movn|ll|sc|sync|madd|mfc0|mtc0|eret|tlbwi|tlbwr|tlbp|tlbr|cache|wait|rfe)$'
 
 rc=0
 for f in "$@"; do
