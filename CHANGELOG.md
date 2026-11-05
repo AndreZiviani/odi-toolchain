@@ -11,6 +11,10 @@ stories together.
 ## Unreleased
 
 ### Changed
+- ci: the `check` job now stops after 30 minutes. A good run takes a few
+  minutes; on 2026-11-05, with snapshot.debian.org's origin down, apt waited
+  in it for hours, and only GitHub's 6 h default would have ended it. No
+  image change.
 - `qemu-kernel-malta/config.fragment` now pins `CONFIG_SHMEM`,
   `CONFIG_TMPFS_POSIX_ACL`, `CONFIG_MTD` and `CONFIG_JFFS2_FS` explicitly
   alongside the `CONFIG_TMPFS` already there, mirroring the filesystem/mm
