@@ -70,6 +70,9 @@ jobs:
   check:
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
+    # A good run takes a few minutes. Without a bound, apt waiting on a
+    # half-down snapshot.debian.org held this job for GitHub's 6 h default.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
