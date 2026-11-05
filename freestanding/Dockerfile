@@ -38,8 +38,10 @@ FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2
 ARG SNAPSHOT=20260925T000000Z
 COPY common/apt-snapshot.sh /usr/local/sbin/apt-snapshot.sh
 # make and file for the builds; curl and python3-minimal (raw sockets, split
-# requests) for the odi-ui HTTP smoke test. That is the whole list: the
-# consumers run their host-side tests on the host, not in here.
+# requests) for the odi-ui HTTP smoke test; strace for odi-oss's rcS trace
+# test (make test-rcs), which used to apt-get it at run time and failed
+# whenever snapshot.debian.org did. That is the whole list: the consumers
+# run their host-side tests on the host, not in here.
 RUN apt-snapshot.sh "$SNAPSHOT" \
  && apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
@@ -50,6 +52,7 @@ RUN apt-snapshot.sh "$SNAPSHOT" \
       libc6-dev-mips-cross=2.36-8cross2 \
       linux-libc-dev-mips-cross=6.1.8-1cross2 \
       make file curl python3-minimal \
+      strace=6.1-0.1 \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=qemu /usr/bin/qemu-mips-static /usr/bin/qemu-mips-static
 
