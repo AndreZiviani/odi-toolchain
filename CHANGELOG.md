@@ -10,14 +10,6 @@ stories together.
 
 ## Unreleased
 
-### Added
-- freestanding: `strace` (6.1-0.1, from the same snapshot as the rest), for
-  odi-oss's `make test-rcs`, which traced rcS with an `strace` it installed
-  with `apt-get` inside this image on every run. snapshot.debian.org
-  answering 503/504 failed that step (and, before odi-oss bounded the
-  install, hung test-qemu for 42 minutes). With it in the image the test
-  downloads nothing at run time. Needs a `freestanding-v4` tag.
-
 ### Changed
 - `qemu-kernel-malta/config.fragment` now pins `CONFIG_SHMEM`,
   `CONFIG_TMPFS_POSIX_ACL`, `CONFIG_MTD` and `CONFIG_JFFS2_FS` explicitly
@@ -34,6 +26,16 @@ stories together.
   odi-oss's digest pin is unchanged. The value of this change is
   documentary -- an explicit line here is not left to an implicit default
   drifting out from under it unnoticed a second time.
+
+## freestanding-v4 (2026-11-05)
+
+### Added
+- freestanding: `strace` (6.1-0.1, from the same snapshot as the rest), for
+  odi-oss's `make test-rcs`, which traced rcS with an `strace` it installed
+  with `apt-get` inside this image on every run. snapshot.debian.org
+  answering 503/504 failed that step (and, before odi-oss bounded the
+  install, hung test-qemu for 42 minutes). With it in the image the test
+  downloads nothing at run time.
 
 ## uclibc-v4 (2026-10-21)
 
