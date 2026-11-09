@@ -18,7 +18,9 @@ stories together.
   twice, on the ubuntu-26.04 runner image (v3 built the same steps in about
   a minute on ubuntu-24.04), and nothing was pushed. The job summary still
   prints the digest to pin, now the digest of the multi-architecture index.
-  No image change.
+  Pull requests and pushes to main also build the freestanding image on an
+  arm64 runner (`check-arm64`), so an arm64 break shows before a tag. No
+  image change.
 - ci: the `check` job now stops after 30 minutes. A good run takes a few
   minutes; on 2026-11-05, with snapshot.debian.org's origin down, apt waited
   in it for hours, and only GitHub's 6 h default would have ended it. No
