@@ -84,6 +84,18 @@ jobs:
       - name: Build the freestanding image and run the ISA self-test
         run: make test
 
+  # The same image built for arm64 on an arm64 runner, as a tag publishes
+  # it: an arm64 build that breaks shows here, not first on a tag.
+  check-arm64:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the freestanding image and run the ISA self-test
+        run: make test
+
   uclibc-check:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.uclibc }}
     runs-on: ubuntu-latest
@@ -118,10 +130,113 @@ jobs:
             -append "console=ttyS0" -m 64M -nographic -no-reboot | tee boot.log || true
           grep -q "Unable to mount root fs" boot.log
 
+  # One leg per architecture, each on a runner of that architecture, so no
+  # image is built under QEMU emulation. freestanding-v4 was first built for
+  # arm64 under QEMU on the amd64 runner, as v1 to v3 were; on the
+  # ubuntu-26.04 runner image both arm64 RUN steps printed their header and
+  # nothing more for 5.5 h, twice, until the job timed out (2026-11-05). A
+  # leg pushes its image by digest only; the manifest job below joins the
+  # legs under the version tag. A leg whose architecture the tag does not
+  # publish stops after "Which image".
   publish:
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 330
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Which image
+        id: which
+        run: |
+          tag=${GITHUB_REF#refs/tags/}
+          # tag_prefix is the tag family; flavour is the Dockerfile
+          # directory AND the image name suffix -- the two differ for the
+          # qemu kernel (tag qemu-malta-vN, directory/image qemu-kernel-malta,
+          # the same short name the tag family already uses for what board
+          # it targets).
+          case $tag in
+          uclibc-v*)       tag_prefix=uclibc;       flavour=uclibc;            platforms=linux/amd64 ;;
+          freestanding-v*) tag_prefix=freestanding; flavour=freestanding;      platforms=linux/amd64,linux/arm64 ;;
+          qemu-malta-v*)   tag_prefix=qemu-malta;    flavour=qemu-kernel-malta; platforms=linux/amd64 ;;
+          *) echo "::error::unknown tag $tag"; exit 1 ;;
+          esac
+          ver=${tag#"$tag_prefix"-}
+          {
+            echo "flavour=$flavour"
+            echo "platforms=$platforms"
+            echo "image=$REGISTRY/odi-toolchain-$flavour"
+            echo "ver=$ver"
+            case ",$platforms," in
+            *",linux/${{ matrix.arch }},"*) echo "build=1" ;;
+            *) echo "build=0" ;;
+            esac
+          } >> "$GITHUB_OUTPUT"
+
+      # The gcc build tree is several GB; the hosted runner has room, but not
+      # much to spare once the preinstalled SDKs are counted.
+      - name: Free disk space
+        if: steps.which.outputs.flavour == 'uclibc' && steps.which.outputs.build == '1'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Lint and self-test first
+        if: steps.which.outputs.flavour == 'freestanding' && matrix.arch == 'amd64'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          make lint
+          make test
+
+      - name: Lint first
+        if: steps.which.outputs.flavour == 'qemu-kernel-malta' && matrix.arch == 'amd64'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          make lint
+
+      - name: Log in to ghcr.io
+        if: steps.which.outputs.build == '1'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push by digest
+        if: steps.which.outputs.build == '1'
+        run: |
+          docker buildx create --use --name odi >/dev/null
+          docker buildx build --progress=plain \
+            --platform "linux/${{ matrix.arch }}" \
+            --build-arg JOBS="$(nproc)" \
+            -f "${{ steps.which.outputs.flavour }}/Dockerfile" \
+            --label "org.opencontainers.image.version=${{ steps.which.outputs.ver }}" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --metadata-file meta.json \
+            --output "type=image,name=${{ steps.which.outputs.image }},push-by-digest=true,name-canonical=true,push=true" .
+          python3 -c 'import json; print(json.load(open("meta.json"))["containerimage.digest"])' > digest-${{ matrix.arch }}
+          echo "${{ matrix.arch }}: $(cat digest-${{ matrix.arch }})"
+
+      - name: Hand the digest to the manifest job
+        if: steps.which.outputs.build == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digest-${{ matrix.arch }}
+          retention-days: 1
+
+  # The legs joined under the version tag, as one multi-architecture image.
+  manifest:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -151,50 +266,28 @@ jobs:
             echo "ver=$ver"
           } >> "$GITHUB_OUTPUT"
 
-      # The gcc build tree is several GB; the hosted runner has room, but not
-      # much to spare once the preinstalled SDKs are counted.
-      - name: Free disk space
-        if: steps.which.outputs.flavour == 'uclibc'
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h /
-
-      - name: Lint and self-test first
-        if: steps.which.outputs.flavour == 'freestanding'
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          make lint
-          make test
-
-      - name: Lint first
-        if: steps.which.outputs.flavour == 'qemu-kernel-malta'
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          make lint
-
-      - name: QEMU for the arm64 build
-        if: contains(steps.which.outputs.platforms, 'arm64')
-        uses: docker/setup-qemu-action@v3
+      - uses: actions/download-artifact@v4
         with:
-          platforms: arm64
+          pattern: digest-*
+          merge-multiple: true
 
       - name: Log in to ghcr.io
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Build and push
+      - name: Tag the legs
         run: |
-          docker buildx create --use --name odi >/dev/null
-          docker buildx build --progress=plain \
-            --platform "${{ steps.which.outputs.platforms }}" \
-            --build-arg JOBS="$(nproc)" \
-            -f "${{ steps.which.outputs.flavour }}/Dockerfile" \
-            -t "${{ steps.which.outputs.image }}:${{ steps.which.outputs.ver }}" \
-            --label "org.opencontainers.image.version=${{ steps.which.outputs.ver }}" \
-            --label "org.opencontainers.image.revision=${{ github.sha }}" \
-            --metadata-file meta.json \
-            --push .
-          digest=$(python3 -c 'import json; print(json.load(open("meta.json"))["containerimage.digest"])')
-          ref="${{ steps.which.outputs.image }}:${{ steps.which.outputs.ver }}@$digest"
+          img="${{ steps.which.outputs.image }}"
+          refs=""
+          for p in $(echo "${{ steps.which.outputs.platforms }}" | tr , ' '); do
+            f="digest-${p#linux/}"
+            [ -s "$f" ] || { echo "::error::no digest for $p"; exit 1; }
+            refs="$refs $img@$(cat "$f")"
+          done
+          # shellcheck disable=SC2086 # one reference per word
+          docker buildx imagetools create -t "$img:${{ steps.which.outputs.ver }}" $refs
+          digest=$(docker buildx imagetools inspect "$img:${{ steps.which.outputs.ver }}" --format '{{json .Manifest}}' |
+            python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')
+          ref="$img:${{ steps.which.outputs.ver }}@$digest"
           echo "published $ref"
           {
             echo "### Published"
