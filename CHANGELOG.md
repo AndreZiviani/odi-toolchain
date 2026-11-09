@@ -11,6 +11,14 @@ stories together.
 ## Unreleased
 
 ### Changed
+- ci: a tag now builds each architecture on a runner of that architecture
+  (`ubuntu-24.04-arm` for arm64) and joins them under the version tag in a
+  `manifest` job, instead of building arm64 under QEMU on the amd64 runner.
+  The freestanding-v4 publish hung in its first arm64 RUN step for 5.5 h,
+  twice, on the ubuntu-26.04 runner image (v3 built the same steps in about
+  a minute on ubuntu-24.04), and nothing was pushed. The job summary still
+  prints the digest to pin, now the digest of the multi-architecture index.
+  No image change.
 - ci: the `check` job now stops after 30 minutes. A good run takes a few
   minutes; on 2026-11-05, with snapshot.debian.org's origin down, apt waited
   in it for hours, and only GitHub's 6 h default would have ended it. No
